@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/rea-mcp-safe-probes.yml"
+      - "scripts/ci/rea-207-mcp-valid-examples.mjs"
   workflow_dispatch:
 permissions:
   contents: read
