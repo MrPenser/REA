@@ -1,0 +1,45 @@
+name: REA safe valid MCP tool probes
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/rea-mcp-safe-probes.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probes:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    env:
+      CI: "true"
+      HUSKY: "0"
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build:cached
+      - name: Invoke valid examples without external side effects
+        run: node scripts/ci/rea-207-mcp-valid-examples.mjs verification-results/mcp-207-safe-valid.json
+      - name: Hash evidence file
+        if: always()
+        run: node -e "const fs=require('node:fs');const c=require('node:crypto');const p='verification-results/mcp-207-safe-valid.json';if(fs.existsSync(p))fs.writeFileSync('verification-results/SHA256SUMS.txt',c.createHash('sha256').update(fs.readFileSync(p)).digest('hex')+'  mcp-207-safe-valid.json\\n')"
+      - name: Retain per-tool responses
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: rea-207-valid-examples-${{ matrix.os }}
+          path: verification-results/
+          if-no-files-found: warn
+          retention-days: 30
