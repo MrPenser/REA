@@ -61,8 +61,12 @@ try {
   }, { timeout: 90_000 });
   assert.notEqual(result.isError, true, "MCP analysis returned tool error");
   const mcpFacts = inspect(result.structuredContent, "MCP");
-  assert.equal(cliFacts.evidence_id, mcpFacts.evidence_id,
-    "same fixture should produce the same evidence identity through CLI and MCP");
+  // Distinct CLI and MCP investigations may have distinct evidence identities.
+  // Compare verified structural facts, not invocation-scoped evidence IDs.
+  assert.equal(cliFacts.module_count, mcpFacts.module_count,
+    "CLI and MCP disagree on the number of source modules");
+  assert.equal(cliFacts.import_edges, mcpFacts.import_edges,
+    "CLI and MCP disagree on the detected module imports");
 
   console.log(JSON.stringify({
     check: "REA_REAL_JAVASCRIPT_APPLICATION_ANALYSIS",
