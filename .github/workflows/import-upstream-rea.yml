@@ -1,0 +1,41 @@
+name: Import upstream REA (one time)
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/import-upstream-rea.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    if: github.repository == 'MrPenser/REA'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout destination
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Import pinned upstream snapshot with ancestry
+        shell: bash
+        env:
+          UPSTREAM_SHA: b2257653ca74e1013553d5bd916a0ef85a3c7678
+          UPSTREAM_URL: https://github.com/morluto/rea.git
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add rea-upstream "$UPSTREAM_URL"
+          git fetch --no-tags --depth=1 rea-upstream "$UPSTREAM_SHA"
+          fetched="$(git rev-parse FETCH_HEAD)"
+          if [ "$fetched" != "$UPSTREAM_SHA" ]; then
+            echo "::error::Upstream commit mismatch: $fetched"
+            exit 1
+          fi
+          git merge --allow-unrelated-histories --no-ff --no-edit             -m "chore: import REA from morluto/rea at $UPSTREAM_SHA" FETCH_HEAD
+          git push origin HEAD:main
+          echo "Imported pinned upstream commit: $UPSTREAM_SHA"
