@@ -16,7 +16,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: rea-build-${{ github.ref }}
+  group: rea-build-${{ github.sha }}
   cancel-in-progress: false
 
 jobs:
@@ -67,9 +67,6 @@ jobs:
       - name: MCP stdio handshake and tool catalog smoke
         run: node scripts/ci/rea-mcp-smoke.mjs
 
-      - name: MCP boundary tests
-        run: npm run test:mcp
-
       - name: Package build and produce SHA-256
         run: |
           set -euo pipefail
@@ -86,3 +83,7 @@ jobs:
           path: build-artifacts/
           if-no-files-found: warn
           retention-days: 30
+
+      - name: MCP boundary tests
+        run: npm run test:mcp
+
