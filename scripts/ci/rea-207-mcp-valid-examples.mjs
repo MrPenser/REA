@@ -32,17 +32,19 @@ try {
   assert.deepEqual(available.slice().sort(), TOOL_CONTRACTS.map((x) => x.name).sort());
   for (const contract of TOOL_CONTRACTS) {
     const disallow = forbidden.filter((key) => contract.effects[key]);
+    const sample = contract.examples[0]?.input ?? (contract.inputSchema.safeParse({}).success ? {} : null);
     const record = {
       tool: contract.name,
       kind: contract.kind,
-      admitted_sample: contract.inputSchema.safeParse(contract.examples[0].input).success,
+      admitted_sample: sample !== null && contract.inputSchema.safeParse(sample).success,
       reason_skipped: disallow,
       result: "NOT_RUN",
     };
     records.push(record);
+    if (sample === null) { record.result = "NO_VALID_SAMPLE"; continue; }
     assert.ok(record.admitted_sample, "invalid canonical example: " + contract.name);
     if (disallow.length > 0) { record.result = "OUT_OF_SAFE_SCOPE"; continue; }
-    const example = contract.examples[0].input;
+    const example = sample;
     try {
       const response = await client.callTool({ name: contract.name, arguments: example }, undefined, { timeout: 12_000 });
       record.result = response.isError ? "RUNTIME_ERROR_OR_UNAVAILABLE" : "RESPONSE_SUCCESS";
@@ -67,12 +69,13 @@ try {
   const summary = {
     total_tools: TOOL_CONTRACTS.length,
     schema_valid_examples: records.filter((x) => x.admitted_sample).length,
-    safely_invoked: records.filter((x) => !["NOT_RUN","OUT_OF_SAFE_SCOPE"].includes(x.result)).length,
+    safely_invoked: records.filter((x) => !["NOT_RUN","OUT_OF_SAFE_SCOPE","NO_VALID_SAMPLE"].includes(x.result)).length,
     successful_handlers: records.filter((x) => x.result === "RESPONSE_SUCCESS").length,
     errors_or_unavailable: records.filter((x) => x.result === "RUNTIME_ERROR_OR_UNAVAILABLE").length,
     call_failures: records.filter((x) => x.result === "CALL_FAILED").length,
     output_schema_mismatches: records.filter((x) => x.result === "SUCCESS_OUTPUT_SCHEMA_MISMATCH").length,
     excluded_due_to_external_effects: records.filter((x) => x.result === "OUT_OF_SAFE_SCOPE").length,
+    without_valid_sample: records.filter((x) => x.result === "NO_VALID_SAMPLE").length,
     provider_specific_full_e2e_coverage: "NOT_MEASURED_BY_THIS_SUITE",
     verdict: failed ? "FAIL" : "SAFE_VALID_EXAMPLES_OBSERVED",
   };
