@@ -1,0 +1,61 @@
+name: REA WebAssembly and native regression verification
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/rea-wasm-regression.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  wasm-native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      CI: "true"
+      HUSKY: "0"
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install and compile
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build:cached
+      - name: Run WebAssembly and native-target scoped tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p verification-results
+          git rev-parse HEAD | tee verification-results/commit.txt
+          npx vitest run \
+            src/application/wasm/WasmArtifactService.test.ts \
+            src/application/wasm/WasmInterfaceComparisonService.test.ts \
+            src/wasm/WabtArtifactProvider.test.ts \
+            src/wasm/WabtInterface.test.ts \
+            src/wasm/WabtOutput.test.ts \
+            tests/acceptance/wasmInterfaceComparison.test.ts \
+            src/application/native/NativeApiInspection.test.ts \
+            src/application/native/NativeCallRoutes.test.ts \
+            src/windows/WindowsNativeLoader.test.ts \
+            --reporter=default 2>&1 | tee verification-results/wasm-native-tests.log
+      - name: Fingerprint results
+        if: always()
+        shell: bash
+        run: |
+          cd verification-results
+          sha256sum * > SHA256SUMS.txt
+      - name: Preserve test evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rea-wasm-native-regression-evidence
+          path: verification-results/
+          if-no-files-found: warn
+          retention-days: 30
