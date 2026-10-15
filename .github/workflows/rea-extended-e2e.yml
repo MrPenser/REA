@@ -1,0 +1,85 @@
+name: REA extended real-analysis verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/rea-extended-e2e.yml"
+      - "scripts/ci/rea-js-version-diff-e2e.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rea-extended-e2e-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  real-analysis:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    defaults:
+      run:
+        shell: bash
+    env:
+      CI: "true"
+      HUSKY: "0"
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+      NO_COLOR: "1"
+
+    steps:
+      - name: Checkout exact REA revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          submodules: false
+
+      - name: Set up Node 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Verify environment and provenance
+        run: |
+          set -euo pipefail
+          mkdir -p verification-results
+          node --version
+          npm --version
+          command -v go
+          go version
+          git rev-parse HEAD | tee verification-results/commit.txt
+          cat UPSTREAM_IMPORT.md
+
+      - name: Install dependencies at pinned versions
+        run: npm ci --no-audit --no-fund
+
+      - name: Compile production REA
+        run: npm run build:cached
+
+      - name: Real JavaScript cross-version change evidence
+        run: |
+          set -euo pipefail
+          node scripts/ci/rea-js-version-diff-e2e.mjs | tee verification-results/js-version-diff.json
+
+      - name: Real Go binary introspection across target formats via CLI and MCP
+        run: |
+          set -euo pipefail
+          node scripts/verify-go-binary.mjs | tee verification-results/go-binary-e2e.json
+
+      - name: Fingerprint reports
+        if: always()
+        run: |
+          cd verification-results
+          sha256sum * > SHA256SUMS.txt || true
+          cat SHA256SUMS.txt
+
+      - name: Retain real-test evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rea-extended-e2e-evidence
+          path: verification-results/
+          if-no-files-found: warn
+          retention-days: 30
