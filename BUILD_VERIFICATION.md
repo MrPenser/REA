@@ -40,3 +40,9 @@
 - No integration with ASTRADELIA / MEDEUS was performed.
 
 **Verdict:** `LINUX_BUILD_AND_MCP_BOOTSTRAP_PASS`; `WINDOWS_RUNTIME_NOT_VERIFIED`; `FULL_PROVIDER_E2E_NOT_VERIFIED`.
+
+## Subsequent Windows validation
+
+The original 2026-10-15 Linux snapshot verification above remains valid. A separate Windows x64 CI lane has now produced a pinned native addon and successfully performed production CLI/MCP static JavaScript analysis. See [WINDOWS_VERIFICATION.md](WINDOWS_VERIFICATION.md) for verified commit, logs, E2E result, hashes, and remaining limitations.
+
+Current combined status: `LINUX_BUILD_PASS` + `WINDOWS_NATIVE_BUILD_PASS` + `WINDOWS_JAVASCRIPT_STATIC_ANALYSIS_E2E_PASS` + `FULL_EXTERNAL_PROVIDER_E2E_NOT_VERIFIED`.
