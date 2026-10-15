@@ -30,7 +30,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git remote add rea-upstream "$UPSTREAM_URL"
-          git fetch --no-tags --depth=1 rea-upstream "$UPSTREAM_SHA"
+          git fetch --no-tags rea-upstream "$UPSTREAM_SHA"
           fetched="$(git rev-parse FETCH_HEAD)"
           if [ "$fetched" != "$UPSTREAM_SHA" ]; then
             echo "::error::Upstream commit mismatch: $fetched"
