@@ -1,0 +1,88 @@
+name: Build and verify REA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/build-rea.yml"
+      - "scripts/ci/rea-mcp-smoke.mjs"
+      - "src/**"
+      - "scripts/**"
+      - "package.json"
+      - "package-lock.json"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rea-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CI: "true"
+      HUSKY: "0"
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+      NO_COLOR: "1"
+    steps:
+      - name: Checkout pinned REA snapshot
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          submodules: false
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Record source identity
+        run: |
+          set -euo pipefail
+          node --version
+          npm --version
+          git rev-parse HEAD
+          cat UPSTREAM_IMPORT.md
+
+      - name: Install exact dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build compiled runtime and generated artifacts
+        run: npm run build:cached
+
+      - name: TypeScript typecheck
+        run: npm run typecheck
+
+      - name: CLI help smoke
+        run: |
+          node scripts/rea.mjs --help > /tmp/rea-help.txt
+          test -s /tmp/rea-help.txt
+          head -n 20 /tmp/rea-help.txt
+
+      - name: MCP stdio handshake and tool catalog smoke
+        run: node scripts/ci/rea-mcp-smoke.mjs
+
+      - name: MCP boundary tests
+        run: npm run test:mcp
+
+      - name: Package build and produce SHA-256
+        run: |
+          set -euo pipefail
+          mkdir -p build-artifacts
+          npm pack --ignore-scripts --pack-destination build-artifacts
+          cd build-artifacts
+          sha256sum *.tgz | tee SHA256SUMS.txt
+          ls -lh
+
+      - name: Upload verified build artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rea-build-node24-linux
+          path: build-artifacts/
+          if-no-files-found: warn
+          retention-days: 30
