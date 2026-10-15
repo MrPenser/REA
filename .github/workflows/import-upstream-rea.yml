@@ -20,7 +20,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
-      - name: Import pinned upstream snapshot with ancestry
+      - name: Import pinned upstream snapshot (without activating upstream workflows)
         shell: bash
         env:
           UPSTREAM_SHA: b2257653ca74e1013553d5bd916a0ef85a3c7678
@@ -30,12 +30,39 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git remote add rea-upstream "$UPSTREAM_URL"
-          git fetch --no-tags rea-upstream "$UPSTREAM_SHA"
+          git fetch --no-tags --depth=1 rea-upstream "$UPSTREAM_SHA"
           fetched="$(git rev-parse FETCH_HEAD)"
-          if [ "$fetched" != "$UPSTREAM_SHA" ]; then
+          test "$fetched" = "$UPSTREAM_SHA" || {
             echo "::error::Upstream commit mismatch: $fetched"
             exit 1
-          fi
-          git merge --allow-unrelated-histories --no-ff --no-edit             -m "chore: import REA from morluto/rea at $UPSTREAM_SHA" FETCH_HEAD
+          }
+
+          # Preserve the original CI workflows without introducing executable
+          # workflow files via a GitHub App token lacking 'workflows' permission.
+          mkdir -p upstream_archive
+          git archive --format=tar FETCH_HEAD .github/workflows |
+            gzip -9 > "upstream_archive/REA_ORIGINAL_WORKFLOWS_${UPSTREAM_SHA:0:12}.tar.gz"
+
+          # Copy the full source tree and preserve gitlink (submodule) pointers
+          # without merging upstream history into this independent repository.
+          git checkout FETCH_HEAD -- .
+          while IFS= read -r path; do
+            git rm -f --ignore-unmatch -- "$path"
+          done < <(git ls-tree -r --name-only FETCH_HEAD -- .github/workflows)
+
+          cat > UPSTREAM_IMPORT.md <<EOF
+          # REA upstream import
+
+          - Upstream repository: https://github.com/morluto/rea
+          - Pinned upstream commit: ${UPSTREAM_SHA}
+          - Import method: source-tree snapshot on an independent branch history.
+          - The upstream CI workflows were archived in `upstream_archive/` rather than activated.
+          - The original MIT LICENSE and THIRD_PARTY_NOTICES.md remain part of the source snapshot.
+          - Submodule references are retained by Git; dependencies were not downloaded or executed.
+          - No build, installation, or execution tests were performed during import.
+          EOF
+
+          git add -A
+          git commit -m "chore: import REA source snapshot from morluto/rea at $UPSTREAM_SHA"
           git push origin HEAD:main
-          echo "Imported pinned upstream commit: $UPSTREAM_SHA"
+          echo "Imported pinned source snapshot: $UPSTREAM_SHA"
