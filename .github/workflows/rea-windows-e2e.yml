@@ -1,0 +1,91 @@
+name: Windows REA build and real-analysis E2E
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/rea-windows-e2e.yml"
+      - "scripts/ci/rea-js-analysis-e2e.mjs"
+      - "scripts/ci/rea-mcp-smoke.mjs"
+      - "src/**"
+      - "package.json"
+      - "package-lock.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rea-windows-e2e-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  windows-build-and-e2e:
+    runs-on: windows-2022
+    timeout-minutes: 35
+    env:
+      CI: "true"
+      HUSKY: "0"
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+      NO_COLOR: "1"
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout verified REA source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          submodules: false
+
+      - name: Node.js 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Record Windows system and source identity
+        run: |
+          node --version
+          npm --version
+          git rev-parse HEAD
+          node -p "JSON.stringify({platform:process.platform,arch:process.arch,node:process.version})"
+
+      - name: Install pinned dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Compile REA
+        run: npm run build:cached
+
+      - name: Validate TypeScript
+        run: npm run typecheck
+
+      - name: Check Windows CLI startup
+        run: |
+          node scripts/rea.mjs --help | Select-Object -First 25
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Launch production MCP and enumerate tools
+        run: node scripts/ci/rea-mcp-smoke.mjs
+
+      - name: Real JavaScript analysis through CLI and MCP
+        run: node scripts/ci/rea-js-analysis-e2e.mjs
+
+      - name: Create portable npm package and SHA-256
+        run: |
+          New-Item -ItemType Directory -Force build-artifacts | Out-Null
+          npm pack --ignore-scripts --pack-destination build-artifacts
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $packages = @(Get-ChildItem -Path build-artifacts -Filter '*.tgz')
+          if ($packages.Count -ne 1) { throw "Expected exactly one package, got $($packages.Count)" }
+          $digest = (Get-FileHash -Algorithm SHA256 $packages[0].FullName).Hash.ToLowerInvariant()
+          "$digest  $($packages[0].Name)" | Set-Content -Path build-artifacts/SHA256SUMS.txt -Encoding ascii
+          Get-Content build-artifacts/SHA256SUMS.txt
+
+      - name: Save Windows-verified build
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rea-node24-windows-tested
+          path: build-artifacts/
+          if-no-files-found: error
+          retention-days: 30
