@@ -1,6 +1,6 @@
 # REA upstream import
 
-**Status:** SOURCE_SNAPSHOT_IMPORTED / BUILD_NOT_TESTED
+**Status:** SOURCE_SNAPSHOT_IMPORTED / LINUX_BUILD_AND_MCP_BOOTSTRAP_PASS (see [BUILD_VERIFICATION.md](BUILD_VERIFICATION.md))
 
 - Upstream: https://github.com/morluto/rea
 - Original revision: `b2257653ca74e1013553d5bd916a0ef85a3c7678`
